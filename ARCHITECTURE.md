@@ -28,3 +28,54 @@
 │   └── /fonts          # เก็บไฟล์ฟอนต์ Technical หรือ Monospace (หากไม่ได้ดึงผ่าน CDN)
 │
 └── /docs               # โฟลเดอร์เก็บเอกสาร Context ของ AI (AGENTS.md, DESIGN.md ฯลฯ)
+## 3. Topology-first v2 Architecture (2026-09-05)
+
+```text
+Device Catalog / Feature Registry
+            ↓
+Topology Graph (nodes + logical links)
+            ↓
+Validation + Link Inference + Port Assignment
+            ↓
+Intent Questions (per device + per link)
+            ↓
+Automatic IP Plan
+            ↓
+Per-device Config Engine
+            ↓
+Packet Tracer Test Checklist
+```
+
+### New modules
+- `js/catalog.js`: Single source of truth for device profiles and supported question set
+- `js/topology.js`: topology graph, IP plan, logical link inference and validation
+- `js/config-engine.js`: transforms topology + intent into per-device scripts/guides
+- `tests/netauto.test.js`: deterministic tests for subnet/topology/config behavior
+
+### Design rule
+UI must never manually duplicate device features. The UI asks questions by reading `profile.features` from the catalog. This is required so future Packet Tracer model profiles can be added without rebuilding the workflow.
+
+
+## 4. v2.3 Network Intent Rules
+
+```text
+Base IPv4 only (x.x.x.x)
+        ↓
+Auto CIDR inference
+        ↓
+Subnet summary (mask/network/broadcast/range/hosts)
+        ↓
+Feature Registry
+   ┌────┴────┐
+No VLAN    VLAN feature selected
+   ↓           ↓
+Flat LAN    Conditional VLAN Plan
+   └────┬──────┘
+        ↓
+Topology-aware Config Engine
+```
+
+- `Topology.usesVlans()` is the single decision point for whether custom VLAN configuration is active.
+- Hidden VLAN definitions are never emitted into config while VLAN intent is disabled.
+- `state.flatNetwork` stores the auto-detected non-VLAN LAN segment.
+- Link mode `auto` is preserved; `resolvedMode` is derived from topology + current VLAN intent so enabling VLAN later can change Switch↔Switch or Router↔L2 from flat access to trunk without rebuilding links.

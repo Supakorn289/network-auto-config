@@ -1,572 +1,376 @@
-/**
- * Network Automation & Subnet Console - Main App Controller
- * 
- * ศูนย์กลางควบคุมแอปพลิเคชัน คอยดักจับ Events และประสานงานโมดูลย่อยทั้งหมด
- */
-
+/** NET-AUTO v2.4 // Interactive topology-first application controller. */
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("NET-AUTO Console Core Initialized.");
+  const Catalog = window.NetCatalog;
+  const Topology = window.NetTopology;
+  const Engine = window.NetConfigEngine;
+  const Subnet = window.NetSubnet;
+  const state = Topology.state;
 
-    // ดึงโมดูล subnet และ generator จาก global namespace
-    const NetSubnet = window.NetSubnet;
-    const NetGenerator = window.NetGenerator;
-    const NetEffects = window.NetEffects;
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const els = {
+    palette: $('#device-palette'), canvas: $('#topology-canvas'), svg: $('#link-layer'), inspector: $('#inspector-body'),
+    linkList: $('#link-list'), stepper: $('#stepper'), questions: $('#question-area'), configs: $('#config-output'),
+    testList: $('#test-checklist'), validation: $('#validation-panel'), category: $('#device-category'), search: $('#device-search'),
+    baseInput: $('#base-network'), networkCalc: $('#network-calculation'), cidrBadge: $('#auto-cidr-badge')
+  };
 
-    // ระบบแจ้งเตือนสไตล์แฮกเกอร์ (Cyber Toast Notification)
-    function showCyberToast(message, type = 'success') {
-        const oldToast = document.querySelector('.cyber-toast');
-        if (oldToast) oldToast.remove();
+  let selectedNodeId = null, connectFrom = null, currentStep = 1, dragging = null;
 
-        const toast = document.createElement('div');
-        toast.className = `cyber-toast ${type === 'success' ? 'cyber-toast-success' : ''}`;
-        const icon = type === 'success' ? '✔' : 'ℹ';
-        
-        toast.innerHTML = `
-            <span class="cyber-toast-icon">// ${icon}</span>
-            <span class="cyber-toast-message">${message}</span>
-        `;
-        document.body.appendChild(toast);
-
-        // แสดงแจ้งเตือนและเล่นเสียงยืนยันคำสั่ง
-        setTimeout(() => {
-            toast.classList.add('show');
-            if (NetEffects && NetEffects.playBeep) {
-                NetEffects.playBeep(1100, 70, 0.02);
-            }
-        }, 10);
-
-        // ทำลายตัวเองหลังเวลาผ่านไป
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 400);
-        }, 3000);
-    }
-
-    // ฟังก์ชันปรับปรุงแถวตัวเลขด้านข้างใน Terminal ให้สอดคล้องกับความยาวจริงของสคริปต์
-    function updateTerminalLineNumbers(configText) {
-        const lineNumbersDiv = document.getElementById('terminal-line-numbers');
-        if (lineNumbersDiv) {
-            const lineCount = configText.split('\n').length;
-            let html = '';
-            for (let i = 1; i <= lineCount; i++) {
-                html += `<span>${i}</span>`;
-            }
-            lineNumbersDiv.innerHTML = html;
-        }
-    }
-
-    // 1. ผูก Real-time Input Masking กับ Input IP หลัก
-    const baseIpInput = document.getElementById('subnet-ip');
-    if (baseIpInput && NetSubnet) {
-        NetSubnet.setupIpMasking(baseIpInput);
-    }
-
-    // 2. ผูก Real-time Input Masking กับ IP ของ VLAN เริ่มต้น
-    const initialVlanIps = document.querySelectorAll('.vlan-ip-input');
-    if (initialVlanIps && NetSubnet) {
-        initialVlanIps.forEach(ipInput => NetSubnet.setupIpMasking(ipInput));
-    }
-
-    // 2.5 ผูก Real-time IP Masking สำหรับ Router และลอจิกสลับ Dynamic Form
-    const routerWanIpInput = document.getElementById('router-wan-ip');
-    const routerLanIpInput = document.getElementById('router-lan-ip');
-    const routerWanGwInput = document.getElementById('router-wan-gw');
-    if (routerWanIpInput && NetSubnet) NetSubnet.setupIpMasking(routerWanIpInput);
-    if (routerLanIpInput && NetSubnet) NetSubnet.setupIpMasking(routerLanIpInput);
-    if (routerWanGwInput && NetSubnet) NetSubnet.setupIpMasking(routerWanGwInput);
-
-    const deviceRoleSelect = document.getElementById('gen-device-role');
-    const hwModelInput = document.getElementById('gen-hw-model');
-
-    const updateFormByDeviceRole = () => {
-        if (!deviceRoleSelect) return;
-        const role = deviceRoleSelect.value;
-        
-        // ล้างคลาสสถานะเก่าของ Body และใส่ตัวใหม่
-        document.body.classList.remove('device-l3', 'device-router', 'device-l2');
-        
-        if (role === 'L3_Core_Switch') {
-            document.body.classList.add('device-l3');
-            if (hwModelInput && (hwModelInput.value === 'ISR 4321' || hwModelInput.value === 'Catalyst 2960')) {
-                hwModelInput.value = 'Catalyst 9300';
-            }
-        } else if (role === 'Edge_Router') {
-            document.body.classList.add('device-router');
-            if (hwModelInput && (hwModelInput.value === 'Catalyst 9300' || hwModelInput.value === 'Catalyst 2960')) {
-                hwModelInput.value = 'ISR 4321';
-            }
-        } else if (role === 'L2_Access_Switch') {
-            document.body.classList.add('device-l2');
-            if (hwModelInput && (hwModelInput.value === 'Catalyst 9300' || hwModelInput.value === 'ISR 4321')) {
-                hwModelInput.value = 'Catalyst 2960';
-            }
-        }
+  function nodeDimensions() {
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      w: parseFloat(styles.getPropertyValue('--topo-node-w')) || 156,
+      h: parseFloat(styles.getPropertyValue('--topo-node-h')) || 94
     };
+  }
 
-    if (deviceRoleSelect) {
-        deviceRoleSelect.addEventListener('change', updateFormByDeviceRole);
-        updateFormByDeviceRole(); // ทำงานทันทีที่โหลดเสร็จ
+  function clampNodeToCanvas(node) {
+    const rect = els.canvas.getBoundingClientRect();
+    const { w, h } = nodeDimensions();
+    if (!rect.width || !rect.height) return;
+    node.x = Math.max(0, Math.min(Math.max(0, rect.width - w), Number(node.x) || 0));
+    node.y = Math.max(0, Math.min(Math.max(0, rect.height - h), Number(node.y) || 0));
+  }
+  function clampAllNodesToCanvas() { state.nodes.forEach(clampNodeToCanvas); }
+
+  function autoNodePosition(index) {
+    const rect = els.canvas.getBoundingClientRect();
+    const { w, h } = nodeDimensions();
+    const gap = window.innerWidth <= 760 ? 12 : 18;
+    const cols = Math.max(1, Math.floor(Math.max(w, rect.width - 24) / (w + gap)));
+    const rows = Math.max(1, Math.floor(Math.max(h, rect.height - 24) / (h + gap)));
+    const col = index % cols;
+    const row = Math.floor(index / cols) % rows;
+    return { x: 12 + col * (w + gap), y: 12 + row * (h + gap) };
+  }
+
+  function toast(message, type='ok') {
+    const el = document.createElement('div'); el.className = `toast ${type}`; el.textContent = message;
+    document.body.appendChild(el); requestAnimationFrame(()=>el.classList.add('show'));
+    setTimeout(()=>{el.classList.remove('show'); setTimeout(()=>el.remove(),250)},2300);
+  }
+
+  function profile(node) { return Catalog.getDevice(node.profileId); }
+  function nodeBy(id) { return Topology.getNode(id); }
+  function deviceImage(device, mode='palette') { return mode === 'topology' ? (device.topologyImage || device.image) : device.image; }
+  function deviceLabel(device) { return device.displayName || device.name; }
+  function escapeHtml(str){return String(str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+  function nodeUsesVlan(n) { return Object.entries(n.features || {}).some(([f,on]) => on && Topology.VLAN_INTENT_FEATURES.has(f)); }
+
+  function renderNetworkCalculation() {
+    try {
+      const info = Topology.previewBase();
+      els.cidrBadge.textContent = `AUTO /${info.cidr}`;
+      els.cidrBadge.classList.remove('invalid');
+      els.networkCalc.innerHTML = `
+        <div class="net-stat primary-stat"><span>AUTO CIDR</span><b>/${info.cidr}</b><small>ระบบตรวจจากรูปแบบ Network Address</small></div>
+        <div class="net-stat"><span>SUBNET MASK</span><b>${info.subnetMask}</b></div>
+        <div class="net-stat"><span>NETWORK</span><b>${info.networkAddress}</b></div>
+        <div class="net-stat"><span>BROADCAST</span><b>${info.broadcastAddress}</b></div>
+        <div class="net-stat wide-stat"><span>USABLE IP RANGE</span><b>${info.usableHostRange}</b></div>
+        <div class="net-stat"><span>USABLE HOSTS</span><b>${Number(info.totalHosts).toLocaleString('en-US')}</b></div>`;
+    } catch (e) {
+      els.cidrBadge.textContent = 'INVALID IP';
+      els.cidrBadge.classList.add('invalid');
+      els.networkCalc.innerHTML = `<div class="network-calc-error"><b>ยังคำนวณไม่ได้</b><span>${escapeHtml(e.message)}</span></div>`;
     }
+  }
 
-    // 3. ฟังก์ชันคำนวณและแสดงผล Subnet (สำหรับแถบคำนวณ Subnet)
-    const btnCalculate = document.getElementById('btn-calculate');
-    if (btnCalculate && NetSubnet) {
-        btnCalculate.addEventListener('click', () => {
-            const ip = document.getElementById('subnet-ip').value;
-            const cidr = parseInt(document.getElementById('subnet-cidr').value, 10);
-
-            try {
-                const result = NetSubnet.calculateSubnet(ip, cidr);
-                
-                // อัปเดต UI ด้วยค่าที่คำนวณได้
-                document.getElementById('val-netmask').textContent = result.subnetMask;
-                
-                const valNetaddr = document.getElementById('val-netaddr');
-                valNetaddr.textContent = result.networkAddress;
-                
-                const valBroadcast = document.getElementById('val-broadcast');
-                valBroadcast.textContent = result.broadcastAddress;
-                
-                document.getElementById('val-hostrange').textContent = result.usableHostRange;
-                
-                const valTotalhosts = document.getElementById('val-totalhosts');
-                valTotalhosts.textContent = `${result.totalHosts.toLocaleString()} Hosts`;
-
-                // จัดรูปแบบข้อความใน Terminal สำหรับการแสดงผลวิเคราะห์ IP
-                const terminalCode = document.getElementById('terminal-code');
-                if (terminalCode) {
-                    const now = new Date();
-                    const timestamp = now.toISOString().replace('T', ' ').substring(0, 19);
-                    
-                    const outputText = `! --- IP SUBNET ANALYSIS RESULT ---
-! Calculated at: ${timestamp}
-! Base IP Input: ${ip}/${cidr}
-!
-! Network Details:
-!  - Subnet Mask:      ${result.subnetMask}
-!  - Network Address:  ${result.networkAddress}
-!  - Broadcast IP:     ${result.broadcastAddress}
-!  - Usable IP Range:  ${result.usableHostRange}
-!  - Total Host IPs:   ${result.totalHosts}
-! -------------------------------------`;
-                    
-                    terminalCode.textContent = outputText;
-                    updateTerminalLineNumbers(outputText);
-
-                    // เล่นเอฟเฟกต์เสียงคำนวณเสร็จสิ้น
-                    if (NetEffects && NetEffects.playBeep) {
-                        NetEffects.playBeep(1200, 100, 0.04);
-                    }
-                    showCyberToast("SUBNET CALCULATION SUCCEEDED");
-                }
-
-            } catch (error) {
-                console.error("Subnet calculation error:", error);
-                showCyberToast(`ERROR: ${error.message}`, "error");
-            }
-        });
-    }
-
-    // 4. ลอจิกการจัดการปุ่มแท็บ (Tab Switching) ใน UI
-    const navButtons = document.querySelectorAll('.nav-btn');
-    navButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            navButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            const targetId = btn.getAttribute('data-target');
-            const sections = document.querySelectorAll('.form-section');
-            sections.forEach(sec => {
-                if (sec.id === targetId) {
-                    sec.classList.add('active');
-                } else {
-                    sec.classList.remove('active');
-                }
-            });
-        });
+  function renderPalette() {
+    const q = els.search.value.trim().toLowerCase(), cat = els.category.value;
+    const list = Catalog.DEVICE_CATALOG.filter(d => (!cat || d.category===cat) && (!q || `${d.name} ${d.family}`.toLowerCase().includes(q)));
+    els.palette.innerHTML = list.map(d => `<button class="device-item" draggable="true" data-profile="${d.id}" title="ลากไปวางหรือคลิกเพื่อเพิ่ม ${d.name}"><span class="device-thumb"><img src="${d.image}" alt="" loading="lazy"><em>${d.icon}</em></span><span class="device-copy"><b>${d.name}</b><small>${d.category}</small></span><span class="add-mark">+</span></button>`).join('');
+    $$('.device-item').forEach(btn => {
+      btn.onclick = () => addDevice(btn.dataset.profile);
+      btn.ondragstart = e => { e.dataTransfer.setData('text/netauto-profile', btn.dataset.profile); e.dataTransfer.effectAllowed='copy'; };
     });
+  }
 
-    // 5. จัดการปุ่มลบ VLAN (สำหรับปุ่มเริ่มต้นที่มีอยู่ใน HTML)
-    const vlanList = document.getElementById('vlan-list');
-    if (vlanList) {
-        vlanList.addEventListener('click', (e) => {
-            if (e.target.classList.contains('btn-remove-vlan')) {
-                const row = e.target.closest('.vlan-row');
-                // อนุญาตให้ลบได้ถ้ามีแถวมากกว่า 1 แถว เพื่อป้องกันการไม่มี VLAN เลย
-                if (vlanList.querySelectorAll('.vlan-row').length > 1) {
-                    row.remove();
-                    showCyberToast("VLAN SEGMENT REMOVED");
-                } else {
-                    showCyberToast("WARNING: AT LEAST 1 VLAN IS REQUIRED", "error");
-                }
-            }
-        });
+  function initCategories() {
+    els.category.innerHTML = '<option value="">ทุกหมวด</option>' + Catalog.categories().map(c=>`<option>${c}</option>`).join('');
+  }
+
+  function addDevice(profileId) {
+    const p = Catalog.getDevice(profileId);
+    const pos = autoNodePosition(state.nodes.length);
+    const n = Topology.addNode(p, pos.x, pos.y);
+    clampNodeToCanvas(n);
+    n.features = Catalog.defaultFeatureState(p);
+    selectedNodeId = n.id; renderAll(); toast(`เพิ่ม ${p.name} แล้ว`);
+  }
+
+  function renderCanvas() {
+    els.canvas.querySelectorAll('.topo-node').forEach(n=>n.remove());
+    clampAllNodesToCanvas();
+    state.nodes.forEach(n => {
+      const p = profile(n); const el = document.createElement('button');
+      el.className = `topo-node ${selectedNodeId===n.id?'selected':''} family-${p.family}`;
+      el.dataset.id = n.id; el.type = 'button'; el.setAttribute('aria-label', `${n.name} — ${p.name}`);
+      el.style.left = `${n.x}px`; el.style.top = `${n.y}px`;
+      el.innerHTML = `<span class="node-photo"><img src="${deviceImage(p,'topology')}" alt="" draggable="false"></span><span class="node-copy"><span class="node-name">${n.name}</span><span class="node-model" title="${p.name}">${deviceLabel(p)}</span><span class="node-badge">${p.category}</span></span>`;
+      el.onpointerdown = e => {
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        const nodeRect = el.getBoundingClientRect();
+        dragging = { id:n.id, offsetX:e.clientX-nodeRect.left, offsetY:e.clientY-nodeRect.top, startX:e.clientX, startY:e.clientY, moved:false };
+        el.setPointerCapture?.(e.pointerId);
+      };
+      el.onpointermove = e => {
+        if (!dragging || dragging.id!==n.id) return;
+        const rect=els.canvas.getBoundingClientRect(); const { w, h } = nodeDimensions();
+        n.x = Math.max(0, Math.min(Math.max(0, rect.width-w), e.clientX-rect.left-dragging.offsetX));
+        n.y = Math.max(0, Math.min(Math.max(0, rect.height-h), e.clientY-rect.top-dragging.offsetY));
+        if (Math.abs(e.clientX-dragging.startX) > 3 || Math.abs(e.clientY-dragging.startY) > 3) dragging.moved=true;
+        el.style.left=`${n.x}px`;el.style.top=`${n.y}px`;renderLinks();
+      };
+      el.onpointerup = () => { const wasMoved = dragging?.moved; dragging=null; if (!wasMoved) handleNodeClick(n.id); };
+      el.onpointercancel = () => { dragging = null; };
+      els.canvas.appendChild(el);
+    });
+    renderLinks();
+  }
+
+  function handleNodeClick(id) {
+    if ($('#btn-connect').classList.contains('active')) {
+      if (!connectFrom) { connectFrom=id; selectedNodeId=id; toast(`เลือก ${nodeBy(id).name} เป็นต้นทาง แล้วคลิกอุปกรณ์ปลายทาง`,'info'); renderAll(); return; }
+      if (connectFrom===id) { connectFrom=null; toast('ยกเลิกต้นทาง','info'); renderAll(); return; }
+      try { Topology.addLink(connectFrom,id); toast(`เชื่อม ${nodeBy(connectFrom).name} ↔ ${nodeBy(id).name} แล้ว`); }
+      catch(e){ toast(e.message,'error'); }
+      connectFrom=null; $('#btn-connect').classList.remove('active'); renderAll(); return;
     }
+    selectedNodeId=id; renderAll();
+    if (window.matchMedia('(max-width: 760px)').matches) requestAnimationFrame(() => document.querySelector('.inspector-pane')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
 
-    // 6. เพิ่ม VLAN แถวใหม่พร้อมผูก IP Masking อัตโนมัติ และ Port Range prediction
-    const btnAddVlan = document.getElementById('btn-add-vlan');
-    if (btnAddVlan && vlanList) {
-        btnAddVlan.addEventListener('click', () => {
-            const rows = vlanList.querySelectorAll('.vlan-row');
-            const nextIndex = rows.length > 0 
-                ? parseInt(rows[rows.length - 1].getAttribute('data-vlan-index'), 10) + 1 
-                : 0;
+  function resolvedMode(link) { return Topology.effectiveLinkMode(link,Catalog); }
 
-            // คาดเดาค่าเริ่มต้นสำหรับ VLAN ใหม่ตามแถวล่าสุด
-            let nextVlanId = 30;
-            let nextVlanName = "Guest";
-            let nextIp = "192.168.30.1";
-            let nextPorts = "0/21-24";
+  function renderLinks() {
+    const { w, h } = nodeDimensions();
+    const paths = state.links.map(l => {
+      const a=nodeBy(l.a),b=nodeBy(l.b); if(!a||!b)return '';
+      const aEl = els.canvas.querySelector(`[data-id="${a.id}"]`); const bEl = els.canvas.querySelector(`[data-id="${b.id}"]`);
+      const aw = aEl?.offsetWidth || w, ah = aEl?.offsetHeight || h, bw = bEl?.offsetWidth || w, bh = bEl?.offsetHeight || h;
+      const x1=a.x+aw/2,y1=a.y+ah/2,x2=b.x+bw/2,y2=b.y+bh/2; const labelX=(x1+x2)/2,labelY=(y1+y2)/2;
+      const mode = resolvedMode(l);
+      const label = l.mode === 'auto' ? `AUTO→${mode.toUpperCase()}` : mode.toUpperCase();
+      return `<g data-link="${l.id}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="link-line ${mode}"/><text x="${labelX}" y="${labelY-7}" class="link-label">${label}</text></g>`;
+    }).join('');
+    els.svg.innerHTML = paths;
+  }
 
-            if (rows.length > 0) {
-                const lastRow = rows[rows.length - 1];
-                const lastId = parseInt(lastRow.querySelector('.vlan-id-input').value, 10);
-                if (!isNaN(lastId)) {
-                    nextVlanId = lastId + 10;
-                }
-                nextVlanName = `Segment_${nextVlanId}`;
-                
-                const lastIpVal = lastRow.querySelector('.vlan-ip-input').value;
-                const ipParts = lastIpVal.split('.');
-                if (ipParts.length === 4) {
-                    const thirdOctet = parseInt(ipParts[2], 10);
-                    if (!isNaN(thirdOctet)) {
-                        ipParts[2] = (thirdOctet + 10).toString();
-                        // หากเกิน 254 ให้รีเซ็ต
-                        if (thirdOctet + 10 > 254) ipParts[2] = "10";
-                        nextIp = ipParts.join('.');
-                    }
-                }
+  function renderInspector() {
+    const n=nodeBy(selectedNodeId);
+    if(!n){ els.inspector.innerHTML='<div class="empty-state"><b>เลือกอุปกรณ์</b><span>คลิกอุปกรณ์บนพื้นที่วาง Network เพื่อแก้ชื่อและค่าพื้นฐาน</span></div>'; return; }
+    const p=profile(n);
+    els.inspector.innerHTML = `
+      <div class="inspector-head"><span class="inspector-photo"><img src="${deviceImage(p,'topology')}" alt="ภาพตัวแทน ${p.name}"></span><div><b>${deviceLabel(p)}</b><small>${p.category} • ${p.family}</small></div></div>
+      <label>Hostname<input id="ins-name" value="${n.name}" maxlength="24"></label>
+      <label>Admin Username<input id="ins-user" value="${n.settings.username}"></label>
+      <label>Secret / Password<input id="ins-secret" type="password" value="${n.settings.secret}"></label>
+      <p class="inspector-note">การตั้งค่า VLAN ถูกย้ายไป Step 2 และจะแสดงเฉพาะเมื่อเลือกใช้ฟังก์ชัน VLAN</p>
+      <button class="danger-link" id="btn-delete-node">ลบอุปกรณ์นี้</button>`;
+    $('#ins-name').oninput=e=>{n.name=e.target.value||n.name;renderCanvas()};
+    $('#ins-user').oninput=e=>n.settings.username=e.target.value;
+    $('#ins-secret').oninput=e=>n.settings.secret=e.target.value;
+    $('#btn-delete-node').onclick=()=>{Topology.removeNode(n.id);selectedNodeId=null;renderAll();};
+  }
 
-                // คาดเดาช่วงพอร์ตถัดไป
-                const lastPortsInput = lastRow.querySelector('.vlan-port-input');
-                if (lastPortsInput) {
-                    const lastPortsVal = lastPortsInput.value;
-                    const portRegex = /(\d+)\/(\d+)-(\d+)/;
-                    const match = lastPortsVal.match(portRegex);
-                    if (match) {
-                        const slot = match[1];
-                        const start = parseInt(match[2], 10);
-                        const end = parseInt(match[3], 10);
-                        const rangeSize = end - start + 1;
-                        const nextStart = end + 1;
-                        const nextEnd = nextStart + rangeSize - 1;
-                        nextPorts = `${slot}/${nextStart}-${nextEnd}`;
-                    }
-                }
-            }
+  function renderLinkList() {
+    if(!state.links.length){els.linkList.innerHTML='<span class="muted">ยังไม่มีการเชื่อมต่อ</span>';return;}
+    els.linkList.innerHTML=state.links.map(l=>`<div class="link-row"><span>${nodeBy(l.a)?.name||'?'} ↔ ${nodeBy(l.b)?.name||'?'}</span><select data-link-mode="${l.id}"><option value="auto" ${l.mode==='auto'?'selected':''}>Auto (${resolvedMode(l)})</option><option value="access" ${l.mode==='access'?'selected':''}>Access</option><option value="trunk" ${l.mode==='trunk'?'selected':''}>Trunk</option><option value="routed" ${l.mode==='routed'?'selected':''}>Routed L3</option></select><button data-remove-link="${l.id}">×</button></div>`).join('');
+    $$('[data-link-mode]').forEach(s=>s.onchange=e=>{const l=state.links.find(x=>x.id===s.dataset.linkMode);l.mode=e.target.value;renderLinks()});
+    $$('[data-remove-link]').forEach(b=>b.onclick=()=>{Topology.removeLink(b.dataset.removeLink);renderAll()});
+  }
 
-            const newRow = document.createElement('div');
-            newRow.className = 'vlan-row';
-            newRow.setAttribute('data-vlan-index', nextIndex);
-            newRow.innerHTML = `
-              <div class="vlan-field vlan-id-col">
-                <label class="sr-only">VLAN ID</label>
-                <input type="number" class="vlan-id-input" placeholder="ID" value="${nextVlanId}" min="2" max="4094" required title="VLAN ID (2-4094)">
-              </div>
-              <div class="vlan-field vlan-name-col">
-                <label class="sr-only">VLAN Name</label>
-                <input type="text" class="vlan-name-input" placeholder="Name" value="${nextVlanName}" required title="VLAN Name">
-              </div>
-              <div class="vlan-field vlan-ip-col">
-                <label class="sr-only">IP Address</label>
-                <input type="text" class="vlan-ip-input" placeholder="IP (e.g. 192.168.30.1)" value="${nextIp}" required title="SVI IP Address">
-              </div>
-              <div class="vlan-field vlan-port-col">
-                <label class="sr-only">Port Range</label>
-                <input type="text" class="vlan-port-input" placeholder="Ports (e.g. 0/21-24)" value="${nextPorts}" title="Switchport Access Ports">
-              </div>
-              <div class="vlan-field vlan-mask-col">
-                <label class="sr-only">CIDR</label>
-                <select class="vlan-cidr-select" title="Subnet Prefix">
-                  <option value="30">/30</option>
-                  <option value="29">/29</option>
-                  <option value="28">/28</option>
-                  <option value="27">/27</option>
-                  <option value="26">/26</option>
-                  <option value="25">/25</option>
-                  <option value="24" selected>/24</option>
-                  <option value="16">/16</option>
-                </select>
-              </div>
-              <div class="vlan-field vlan-dhcp-col">
-                <label class="checkbox-label" title="Enable DHCP pool for this VLAN">
-                  <input type="checkbox" class="vlan-dhcp-check" checked>
-                  <span>DHCP</span>
-                </label>
-              </div>
-              <button type="button" class="btn-remove-vlan" title="Delete VLAN">×</button>
-            `;
+  function renderVlans() {
+    const box=$('#vlan-editor'); if (!box) return;
+    box.innerHTML=state.vlans.map((v,i)=>`<div class="vlan-edit"><input data-vlan-id="${i}" type="number" min="1" max="4094" value="${v.id}" aria-label="VLAN ID"><input data-vlan-name="${i}" value="${v.name}" aria-label="VLAN Name"><button data-del-vlan="${i}" ${state.vlans.length<=1?'disabled':''} title="ลบ VLAN">×</button></div>`).join('');
+    $$('[data-vlan-id]').forEach(el=>el.onchange=e=>{
+      const index=Number(el.dataset.vlanId), oldId=Number(state.vlans[index].id), newId=Number(e.target.value);
+      state.vlans[index].id=newId;
+      state.nodes.forEach(n=>{
+        if(Number(n.settings.accessVlan)===oldId) n.settings.accessVlan=newId;
+        if(Number(n.settings.managementVlan)===oldId) n.settings.managementVlan=newId;
+      });
+      state.links.forEach(l=>{
+        if(Number(l.vlan)===oldId) l.vlan=newId;
+        if(l.allowedVlans) l.allowedVlans=l.allowedVlans.split(',').map(x=>Number(x.trim())===oldId?String(newId):x.trim()).filter(Boolean).join(',');
+      });
+      renderLinkQuestions();
+    });
+    $$('[data-vlan-name]').forEach(el=>el.oninput=e=>state.vlans[Number(el.dataset.vlanName)].name=e.target.value.toUpperCase());
+    $$('[data-del-vlan]').forEach(el=>el.onclick=()=>{state.vlans.splice(Number(el.dataset.delVlan),1);renderVlanPlan();renderLinkQuestions();});
+  }
 
-            vlanList.appendChild(newRow);
-            showCyberToast(`VLAN ${nextVlanId} SEGMENT ADDED`);
+  function renderVlanPlan() {
+    const section = $('#vlan-plan-section'); if (!section) return;
+    const active = Topology.usesVlans(); state.vlanEnabled = active;
+    section.hidden = !active;
+    if (!active) return;
+    Topology.ensureDefaultVlans();
+    const hint = $('#vlan-plan-hint');
+    try {
+      const base=Topology.previewBase();
+      hint.textContent = base.cidr <= 24 ? `Base ${base.networkAddress}/${base.cidr} • ระบบจัด /24 ให้แต่ละ VLAN` : 'Base Network เล็กเกินไปสำหรับ VLAN /24';
+    } catch { hint.textContent='กรอก Base Network ให้ถูกต้องก่อน'; }
+    renderVlans();
+  }
 
-            // ผูก Input Masking ให้กับ VLAN IP ช่องใหม่
-            const newIpInput = newRow.querySelector('.vlan-ip-input');
-            if (newIpInput && NetSubnet) {
-                NetSubnet.setupIpMasking(newIpInput);
-            }
-        });
+  function settingLabel(name,value,placeholder='') {
+    return `<label>${name}<input data-setting-node="__NODE__" data-setting="${value}" value="__VALUE__" ${placeholder?`placeholder="${placeholder}"`:''}></label>`;
+  }
+
+  function advancedFields(n,p) {
+    const fields = [
+      ['OSPF Area','ospfArea',''],['EIGRP AS','eigrpAs',''],['DHCP Helper','helperAddress','เช่น 10.10.0.10'],['WAN Gateway','wanGateway','ถ้ามี ISP'],
+      ['SSID','ssid',''],['Wi-Fi Password','wifiPassword',''],['EtherChannel Ports','channelPorts','Gi0/1 - 2'],
+      ['Static NAT Local','staticNatLocal','10.10.0.50'],['Static NAT Global','staticNatGlobal','203.0.113.50'],['Serial Clock Rate','clockRate','']
+    ];
+    if (nodeUsesVlan(n)) {
+      fields.splice(6,0,['Native VLAN','nativeVlan',''],['VTP Domain','vtpDomain','']);
     }
+    const inputs = fields.map(([label,key,ph]) => `<label>${label}<input data-setting-node="${n.id}" data-setting="${key}" value="${n.settings[key] ?? ''}" ${ph?`placeholder="${ph}"`:''}></label>`).join('');
+    const vlanSelectors = Topology.usesVlans() ? `
+      <label>Access / User VLAN<select data-setting-node="${n.id}" data-setting="accessVlan">${state.vlans.map(v=>`<option value="${v.id}" ${Number(n.settings.accessVlan)===Number(v.id)?'selected':''}>VLAN ${v.id} — ${v.name}</option>`).join('')}</select></label>
+      ${['l2switch','l3switch','wlc'].includes(p.family)?`<label>Management VLAN<select data-setting-node="${n.id}" data-setting="managementVlan">${state.vlans.map(v=>`<option value="${v.id}" ${Number(n.settings.managementVlan)===Number(v.id)?'selected':''}>VLAN ${v.id} — ${v.name}</option>`).join('')}</select></label>`:''}` : '';
+    return `${vlanSelectors}${inputs}`;
+  }
 
-    // 8. รันสคริปต์ Cisco IOS CLI (COMPILE CISCO IOS)
-    const btnGenerate = document.getElementById('btn-generate');
-    if (btnGenerate && NetGenerator) {
-        btnGenerate.addEventListener('click', () => {
-            const hostname = document.getElementById('gen-hostname').value;
-            const enableSecret = document.getElementById('gen-secret').value;
-            const bannerMotd = document.getElementById('gen-motd').value;
-            const enableSsh = document.getElementById('gen-enable-ssh').checked;
-            const portType = document.getElementById('gen-port-type').value;
-            const deviceRole = document.getElementById('gen-device-role').value;
-            const hwModel = document.getElementById('gen-hw-model').value.trim();
-            const disableDns = document.getElementById('gen-disable-dns').checked;
+  function renderQuestions() {
+    if(!state.nodes.length){els.questions.innerHTML='<div class="empty-state"><b>ยังไม่มีอุปกรณ์</b><span>กลับไป Step 1 แล้วเพิ่มอุปกรณ์ก่อน</span></div>';return;}
+    if (Topology.usesVlans()) Topology.ensureDefaultVlans();
+    els.questions.innerHTML = state.nodes.map(n=>{
+      const p=profile(n); const grouped={};
+      p.features.forEach(fid=>{const f=Catalog.getFeature(fid); if(!f)return;(grouped[f.group]??=[]).push({id:fid,...f})});
+      const groups=Object.entries(grouped).map(([group,features])=>`<div class="feature-group"><h4>${group}</h4>${features.map(f=>`<label class="feature-toggle"><span><b>${f.label}</b>${f.note?`<small>${f.note}</small>`:''}</span><input type="checkbox" data-feature-node="${n.id}" data-feature="${f.id}" ${n.features[f.id]?'checked':''}><i></i></label>`).join('')}</div>`).join('');
+      return `<section class="question-device"><header><span class="question-device-photo"><img src="${deviceImage(p,'topology')}" alt=""></span><div><h3>${n.name}</h3><p>${deviceLabel(p)} — เลือกเฉพาะฟังก์ชันที่ต้องการใช้งานจริง</p></div></header>${groups || '<p class="muted">อุปกรณ์ประเภทนี้ไม่มี CLI feature ที่ต้องถาม</p>'}<details><summary>ค่าขั้นสูงของอุปกรณ์</summary><div class="advanced-grid">${advancedFields(n,p)}</div></details></section>`;
+    }).join('');
+    $$('[data-feature-node]').forEach(el=>el.onchange=()=>{
+      nodeBy(el.dataset.featureNode).features[el.dataset.feature]=el.checked;
+      if (Topology.usesVlans()) Topology.ensureDefaultVlans();
+      // Re-render so VLAN-only settings appear/disappear immediately and no irrelevant input remains visible.
+      renderQuestions();
+    });
+    $$('[data-setting-node]').forEach(el=>{
+      const eventName = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(eventName,()=>{
+        const node=nodeBy(el.dataset.settingNode); if(!node)return;
+        const numeric=['accessVlan','managementVlan','nativeVlan','ospfArea','eigrpAs'].includes(el.dataset.setting);
+        node.settings[el.dataset.setting]=numeric ? Number(el.value) : el.value;
+      });
+    });
+    renderVlanPlan();
+    renderLinkQuestions();
+  }
 
-            // รวบรวมข้อมูลตาม Device Role
-            let vlans = [];
-            let routerConfig = {};
-            let hasError = false;
+  function renderLinkQuestions() {
+    const box = $('#link-question-area'); if (!box) return;
+    if (!state.links.length) { box.innerHTML='<div class="empty-state"><b>ยังไม่มีลิงก์</b><span>กลับไปเชื่อมอุปกรณ์ก่อน</span></div>'; return; }
+    const useVlans = Topology.usesVlans();
+    box.classList.toggle('without-vlan',!useVlans);
+    box.innerHTML = state.links.map(l => {
+      const vlanControls = useVlans ? `<select data-q-vlan="${l.id}" title="Access VLAN">${state.vlans.map(v=>`<option value="${v.id}" ${Number(l.vlan)===Number(v.id)?'selected':''}>VLAN ${v.id}</option>`).join('')}</select><input data-q-allowed="${l.id}" value="${l.allowedVlans || state.vlans.map(v=>v.id).join(',')}" title="Allowed VLANs" placeholder="Allowed VLANs เช่น 10,20">` : '';
+      return `<div class="link-question ${useVlans?'with-vlan':'flat-link'}"><div><b>${nodeBy(l.a)?.name||'?'} ↔ ${nodeBy(l.b)?.name||'?'}</b><small>${l.aPort||'auto-port'} ↔ ${l.bPort||'auto-port'} • Auto = ${resolvedMode(l)}</small></div><select data-q-mode="${l.id}"><option value="auto" ${l.mode==='auto'?'selected':''}>Auto (${resolvedMode(l)})</option><option value="access" ${l.mode==='access'?'selected':''}>Access</option><option value="trunk" ${l.mode==='trunk'?'selected':''}>Trunk</option><option value="routed" ${l.mode==='routed'?'selected':''}>Routed L3</option></select>${vlanControls}</div>`;
+    }).join('');
+    $$('[data-q-mode]').forEach(el=>el.onchange=()=>{state.links.find(l=>l.id===el.dataset.qMode).mode=el.value;renderLinks();renderLinkQuestions();});
+    $$('[data-q-vlan]').forEach(el=>el.onchange=()=>{state.links.find(l=>l.id===el.dataset.qVlan).vlan=Number(el.value)});
+    $$('[data-q-allowed]').forEach(el=>el.oninput=()=>{state.links.find(l=>l.id===el.dataset.qAllowed).allowedVlans=el.value});
+  }
 
-            if (deviceRole === 'Edge_Router') {
-                const wanIf = document.getElementById('router-wan-if').value.trim();
-                const wanIp = document.getElementById('router-wan-ip').value.trim();
-                const wanCidr = parseInt(document.getElementById('router-wan-cidr').value, 10);
-                const wanGw = document.getElementById('router-wan-gw').value.trim();
-                const lanIf = document.getElementById('router-lan-if').value.trim();
-                const lanIp = document.getElementById('router-lan-ip').value.trim();
-                const lanCidr = parseInt(document.getElementById('router-lan-cidr').value, 10);
-                const ospfPid = parseInt(document.getElementById('router-ospf-pid').value, 10);
-                const ospfArea = parseInt(document.getElementById('router-ospf-area').value, 10);
-                const enableOspf = document.getElementById('router-enable-ospf').checked;
-                const enableNat = document.getElementById('router-enable-nat').checked;
-                const blockSsh = document.getElementById('router-block-ssh').checked;
-
-                if (wanIf === "" || lanIf === "") {
-                    showCyberToast("ERROR: INTERFACE NAMES CANNOT BE EMPTY", "error");
-                    return;
-                }
-
-                // รูปแบบ IP Address format check
-                const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
-                if (!ipRegex.test(wanIp)) {
-                    showCyberToast(`ERROR: INVALID WAN IP '${wanIp}'`, "error");
-                    return;
-                }
-                if (!ipRegex.test(lanIp)) {
-                    showCyberToast(`ERROR: INVALID LAN IP '${lanIp}'`, "error");
-                    return;
-                }
-                if (wanGw !== "" && !ipRegex.test(wanGw)) {
-                    showCyberToast(`ERROR: INVALID DEFAULT GATEWAY IP '${wanGw}'`, "error");
-                    return;
-                }
-
-                if (enableOspf && (isNaN(ospfPid) || ospfPid < 1 || ospfPid > 65535)) {
-                    showCyberToast("ERROR: INVALID OSPF PROCESS ID (1-65535)", "error");
-                    return;
-                }
-                if (enableOspf && (isNaN(ospfArea) || ospfArea < 0)) {
-                    showCyberToast("ERROR: INVALID OSPF AREA", "error");
-                    return;
-                }
-
-                routerConfig = {
-                    wanIf,
-                    wanIp,
-                    wanCidr,
-                    wanGw,
-                    lanIf,
-                    lanIp,
-                    lanCidr,
-                    ospfPid,
-                    ospfArea,
-                    enableOspf,
-                    enableNat,
-                    blockSsh
-                };
-            } else {
-                // รวบรวมข้อมูล VLANs จากตาราง
-                const vlanRows = document.querySelectorAll('#vlan-list .vlan-row');
-                
-                vlanRows.forEach(row => {
-                    const idVal = parseInt(row.querySelector('.vlan-id-input').value, 10);
-                    const nameVal = row.querySelector('.vlan-name-input').value.trim();
-                    const ipVal = row.querySelector('.vlan-ip-input').value.trim();
-                    const portRangeVal = row.querySelector('.vlan-port-input').value.trim();
-                    const cidrVal = parseInt(row.querySelector('.vlan-cidr-select').value, 10);
-                    const dhcpVal = row.querySelector('.vlan-dhcp-check').checked;
-
-                    // ตรวจสอบความถูกต้องเบื้องต้นของ VLAN Row
-                    if (isNaN(idVal) || idVal < 2 || idVal > 4094) {
-                        showCyberToast(`ERROR: INVALID VLAN ID ${idVal}`, "error");
-                        hasError = true;
-                        return;
-                    }
-
-                    if (nameVal === "") {
-                        showCyberToast("ERROR: VLAN NAME CANNOT BE EMPTY", "error");
-                        hasError = true;
-                        return;
-                    }
-
-                    // L2 Switch ไม่จำเป็นต้องเช็ค SVI IP (ถูกซ่อน)
-                    if (deviceRole !== 'L2_Access_Switch') {
-                        const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
-                        if (!ipRegex.test(ipVal)) {
-                            showCyberToast(`ERROR: INVALID IP '${ipVal}' ON VLAN ${idVal}`, "error");
-                            hasError = true;
-                            return;
-                        }
-                    }
-
-                    vlans.push({
-                        id: idVal,
-                        name: nameVal,
-                        ip: ipVal,
-                        portRange: portRangeVal,
-                        cidr: cidrVal,
-                        dhcp: dhcpVal
-                    });
-                });
-
-                if (hasError) return;
-
-                // ตรวจสอบ VLAN ID ซ้ำ
-                const vlanIds = vlans.map(v => v.id);
-                const duplicates = vlanIds.filter((item, index) => vlanIds.indexOf(item) !== index);
-                if (duplicates.length > 0) {
-                    showCyberToast(`ERROR: DUPLICATE VLAN ID DETECTED (${duplicates[0]})`, "error");
-                    return;
-                }
-            }
-
-            try {
-                // เปลี่ยนสถานะปุ่มชั่วคราวและใช้ Scramble Text Effect เพิ่มความเท่
-                const btnLabel = btnGenerate.querySelector('.btn-label') || btnGenerate;
-                
-                if (NetEffects && NetEffects.scrambleText) {
-                    NetEffects.scrambleText(btnLabel, "COMPILING IOS...", 500);
-                }
-
-                setTimeout(() => {
-                    const ciscoConfig = NetGenerator.generateCiscoConfig({
-                        hostname,
-                        enableSecret,
-                        bannerMotd,
-                        enableSsh,
-                        portType,
-                        vlans,
-                        deviceRole,
-                        hwModel,
-                        routerConfig,
-                        disableDns
-                    });
-
-                    // อัปเดต Terminal
-                    const terminalCode = document.getElementById('terminal-code');
-                    if (terminalCode) {
-                        terminalCode.textContent = ciscoConfig;
-                        updateTerminalLineNumbers(ciscoConfig);
-                        
-                        // เลื่อนสกรอลล์กลับไปด้านบนสุด
-                        const terminalBody = terminalCode.closest('.terminal-body');
-                        if (terminalBody) terminalBody.scrollTop = 0;
-                    }
-
-                    if (NetEffects && NetEffects.playBeep) {
-                        NetEffects.playBeep(1400, 180, 0.05);
-                    }
-                    showCyberToast("CISCO IOS CONFIG COMPILED SUCCESSFULLY");
-                }, 500);
-
-            } catch (err) {
-                console.error("Config compilation error:", err);
-                showCyberToast(`ERROR: ${err.message}`, "error");
-            }
-        });
+  function prepareTopology() {
+    const result=Topology.validate(Catalog); renderValidation(result); if(result.errors.length) return false;
+    Topology.assignPorts(Catalog);
+    if (state.internet) {
+      const edge = state.nodes.find(n => profile(n).family === 'router');
+      if (edge) { edge.features.natPat = true; edge.features.staticRoute = true; }
     }
+    try { Topology.planAddresses(Catalog); } catch(e){toast(e.message,'error');return false;}
+    return true;
+  }
 
-    // 9. ทำปุ่ม Copy to Clipboard ใช้งานได้จริง
-    const btnCopyCode = document.getElementById('btn-copy-code');
-    if (btnCopyCode) {
-        btnCopyCode.addEventListener('click', () => {
-            const terminalCode = document.getElementById('terminal-code');
-            if (!terminalCode) return;
+  function renderValidation(r=Topology.validate(Catalog)) {
+    const items=[...r.errors.map(x=>`<li class="bad">${x}</li>`),...r.warnings.map(x=>`<li class="warn">${x}</li>`)];
+    els.validation.innerHTML=items.length?`<ul>${items.join('')}</ul>`:'<span class="good">Topology ผ่านการตรวจพื้นฐาน</span>';
+  }
 
-            const text = terminalCode.textContent;
-            
-            // ตรวจสอบว่ามีสคริปต์จริงหรือไม่
-            if (text.includes("Press \"COMPILE CISCO IOS\"")) {
-                showCyberToast("WARNING: COMPILE CONFIG BEFORE COPYING", "error");
-                return;
-            }
+  function generateAll() {
+    if(!prepareTopology()) return;
+    const outputs=state.nodes.map(n=>({n,p:profile(n),text:Engine.generateDevice(n,profile(n),state)}));
+    els.configs.innerHTML=outputs.map(({n,p,text},i)=>`<article class="config-device ${i===0?'active':''}" data-config-card="${n.id}"><header><div><b>${n.name}</b><small>${p.name}</small></div><button data-copy="${n.id}">COPY</button></header><pre><code>${escapeHtml(text)}</code></pre></article>`).join('');
+    $$('[data-copy]').forEach(b=>b.onclick=async()=>{const card=$(`[data-config-card="${b.dataset.copy}"] code`);await navigator.clipboard.writeText(card.textContent);toast(`คัดลอก config ${nodeBy(b.dataset.copy).name} แล้ว`)});
+    const tests=Engine.testChecklist(state,Catalog); els.testList.innerHTML=tests.map((t,i)=>`<li><span>${String(i+1).padStart(2,'0')}</span>${t}</li>`).join('');
+    gotoStep(3,false);
+  }
 
-            navigator.clipboard.writeText(text).then(() => {
-                showCyberToast("CONFIG COPIED TO CLIPBOARD // NODE_SECURE");
-            }).catch(err => {
-                console.error("Clipboard copy error:", err);
-                
-                // Fallback copy สำหรับเบราว์เซอร์ที่ไม่ซัพพอร์ต writeText
-                try {
-                    const textarea = document.createElement('textarea');
-                    textarea.value = text;
-                    textarea.style.position = 'fixed';
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textarea);
-                    showCyberToast("CONFIG COPIED TO CLIPBOARD // FALLBACK_SUCCESS");
-                } catch (fallbackErr) {
-                    showCyberToast("CLIPBOARD WRITE FAILED", "error");
-                }
-            });
-        });
-    }
+  function exportProject() {
+    const payload={version:'2.4',generatedAt:new Date().toISOString(),state};
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='net-auto-project.json';a.click();URL.revokeObjectURL(a.href);
+  }
 
-    // 10. ทำปุ่ม Download Script ใช้งานได้จริง
-    const btnDownloadCode = document.getElementById('btn-download-code');
-    if (btnDownloadCode) {
-        btnDownloadCode.addEventListener('click', () => {
-            const terminalCode = document.getElementById('terminal-code');
-            if (!terminalCode) return;
+  function downloadAllConfigs() {
+    if(!prepareTopology()) return;
+    const text=state.nodes.map(n=>`\n\n########## ${n.name} ##########\n${Engine.generateDevice(n,profile(n),state)}`).join('');
+    const blob=new Blob([text],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='net-auto-all-configs.txt';a.click();URL.revokeObjectURL(a.href);
+  }
 
-            const text = terminalCode.textContent;
-            
-            if (text.includes("Press \"COMPILE CISCO IOS\"")) {
-                showCyberToast("WARNING: COMPILE CONFIG BEFORE DOWNLOADING", "error");
-                return;
-            }
+  function gotoStep(step, prepare=true) {
+    if(step===2 && prepare && !prepareTopology()) return;
+    currentStep=step;
+    $$('.workflow-step').forEach(s=>s.classList.toggle('active',Number(s.dataset.step)===step));
+    $$('.step-panel').forEach(s=>s.classList.toggle('active',Number(s.dataset.panel)===step));
+    if(step===1) renderAll();
+    if(step===2) renderQuestions();
+    if(step===3) renderValidation();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
 
-            const hostname = document.getElementById('gen-hostname').value || "Core-SW";
-            const sanitizedHostname = hostname.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+  function renderAll(){renderCanvas();renderInspector();renderLinkList();renderNetworkCalculation();renderValidation();}
 
-            try {
-                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${sanitizedHostname}_cisco_ios.cfg`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                showCyberToast(`CONFIG DOWNLOADED: ${sanitizedHostname}_cisco_ios.cfg`);
-            } catch (err) {
-                console.error("Download file error:", err);
-                showCyberToast("FILE DOWNLOAD FAILED", "error");
-            }
-        });
-    }
+  initCategories(); renderPalette(); renderAll();
+  Subnet.setupIpMasking(els.baseInput);
+  els.search.oninput=renderPalette; els.category.onchange=renderPalette;
+  els.canvas.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';els.canvas.classList.add('drag-over')};
+  els.canvas.ondragleave=()=>els.canvas.classList.remove('drag-over');
+  els.canvas.ondrop=e=>{
+    e.preventDefault(); els.canvas.classList.remove('drag-over');
+    const id=e.dataTransfer.getData('text/netauto-profile'); if(!id)return;
+    const rect=els.canvas.getBoundingClientRect(); const p=Catalog.getDevice(id); const {w,h}=nodeDimensions();
+    const n=Topology.addNode(p,Math.max(0,Math.min(Math.max(0,rect.width-w),e.clientX-rect.left-w/2)),Math.max(0,Math.min(Math.max(0,rect.height-h),e.clientY-rect.top-h/2)));
+    n.features=Catalog.defaultFeatureState(p);selectedNodeId=n.id;renderAll();toast(`เพิ่ม ${p.name} แล้ว`);
+  };
+  $('#btn-connect').onclick=()=>{connectFrom=null;$('#btn-connect').classList.toggle('active');toast($('#btn-connect').classList.contains('active')?'โหมดเชื่อมต่อ: คลิกอุปกรณ์ตัวแรก แล้วคลิกตัวที่สอง':'ปิดโหมดเชื่อมต่อ','info')};
+  $('#btn-clear').onclick=()=>{
+    Topology.reset(); selectedNodeId=null; connectFrom=null;
+    els.baseInput.value=state.baseNetwork; $('#internet-required').checked=false;
+    renderAll(); toast('ล้าง Topology แล้ว','info');
+  };
+  $('#btn-add-vlan').onclick=()=>{let id=10;while(state.vlans.some(v=>v.id===id))id+=10;state.vlans.push({id,name:`VLAN_${id}`,cidr:24});renderVlanPlan();renderLinkQuestions();};
+  els.baseInput.oninput=e=>{state.baseNetwork=e.target.value.trim();renderNetworkCalculation();renderValidation();};
+  $('#internet-required').onchange=e=>state.internet=e.target.checked;
+  $('#btn-step2').onclick=()=>gotoStep(2);
+  $('#btn-back1').onclick=()=>gotoStep(1,false);
+  $('#btn-generate').onclick=generateAll;
+  $('#btn-back2').onclick=()=>gotoStep(2,false);
+  $('#btn-export-project').onclick=exportProject;
+  $('#btn-download-all').onclick=downloadAllConfigs;
 
-    // 11. จัดการนาฬิกาบน HUD
-    const clockEl = document.getElementById('hud-clock');
-    if (clockEl) {
-        const updateClock = () => {
-            const now = new Date();
-            const pad = (n) => n.toString().padStart(2, '0');
-            clockEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        };
-        setInterval(updateClock, 1000);
-        updateClock(); // อัปเดตทันที
-    }
+  let resizeFrame = 0;
+  const syncCanvasAfterResize = () => {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => { clampAllNodesToCanvas(); renderCanvas(); });
+  };
+  if ('ResizeObserver' in window) new ResizeObserver(syncCanvasAfterResize).observe(els.canvas);
+  else window.addEventListener('resize', syncCanvasAfterResize, {passive:true});
+
+  $('#btn-load-demo').onclick=()=>{
+    Topology.reset(); els.baseInput.value=state.baseNetwork; $('#internet-required').checked=false;
+    const rp=autoNodePosition(0), sp=autoNodePosition(1), ap=autoNodePosition(2), pp=autoNodePosition(3);
+    const r=Topology.addNode(Catalog.getDevice('r-2911'),rp.x,rp.y);r.features=Catalog.defaultFeatureState(Catalog.getDevice(r.profileId));r.features.ospf=true;r.features.dhcpServer=true;
+    const s=Topology.addNode(Catalog.getDevice('l3-3560'),sp.x,sp.y);s.features=Catalog.defaultFeatureState(Catalog.getDevice(s.profileId));s.features.ospf=true;s.features.vlanDatabase=true;s.features.interVlan=true;
+    const a=Topology.addNode(Catalog.getDevice('sw-2960-24tt'),ap.x,ap.y);a.features=Catalog.defaultFeatureState(Catalog.getDevice(a.profileId));a.features.vlanDatabase=true;
+    const pc=Topology.addNode(Catalog.getDevice('pc-pt'),pp.x,pp.y);pc.features=Catalog.defaultFeatureState(Catalog.getDevice(pc.profileId));
+    state.vlans=[{id:10,name:'USERS',cidr:24},{id:20,name:'STAFF',cidr:24},{id:30,name:'GUEST',cidr:24}];
+    Topology.addLink(r.id,s.id);Topology.addLink(s.id,a.id);Topology.addLink(a.id,pc.id);
+    selectedNodeId=s.id;renderAll();toast('โหลด Demo Topology แล้ว');
+  };
 });

@@ -14,7 +14,7 @@
 - **Phase 3: Core Logic (Subnet & Generator)** -> `[COMPLETED]` (สร้างและอัปเกรดลอจิก subnet.js และ generator.js สำเร็จลุล่วง ไม่มี Error ใน Packet Tracer)
 - **Phase 4: Interactions & Effects** -> `[COMPLETED]` (ทำระบบ Intro Screen, Boot Sequence, Canvas Network Graph และ Toast Alerts สมบูรณ์ครบถ้วน)
 - **Phase 5: Multi-device Topology Scaling** -> `[COMPLETED]` (ขยายขีดความสามารถรองรับ Multi-device Topology: เพิ่ม Device Role, Hardware Model, ลอจิก Dynamic Form, แยกสคริปต์ Router/L2 Switch และอัปเกรดฟีเจอร์เราเตอร์ระดับ Production Grade เช่น DNS Disable, Default Route, ACL Firewall)
-- **System State:** `[READY FOR PRODUCTION]` *(หมายเหตุ: ผ่านการจำลองและทดสอบการใช้งานบน Cisco Packet Tracer ในสถานการณ์จริงเสร็จสมบูรณ์ 100%)*
+- **System State:** `[ACTIVE DEVELOPMENT / TESTED CORE]` — Core logic ผ่าน automated tests; config ที่ขึ้นกับ model/IOS ยังต้องตรวจใน Cisco Packet Tracer ก่อนใช้งานจริง
 
 ## 3. Work Log (ประวัติการทำงาน)
 - [x] กำหนดโครงสร้างและเป้าหมายโปรเจกต์
@@ -54,3 +54,45 @@
   - ห้ามใช้สี Pure Black (`#000`) หรือ Pure White (`#fff`) ให้ใช้ระบบสี OKLCH
   - ห้ามซ้อน Card (No Nested Cards)
 - **Code Quality:** โค้ดต้องสะอาด เป็นโมดูล (Modular) และใส่คอมเมนต์อธิบายการทำงานให้ชัดเจน เพื่อประโยชน์ในการพรีเซนต์งาน
+## 6. Phase 6 — Topology-first Intent Engine (2026-09-05)
+- [x] เปลี่ยน UX จาก Form-first เป็น **Topology → Feature Questions → Config**
+- [x] เพิ่ม Drag & Drop Device Library และ Click-to-Connect โดยไม่บังคับเลือกชนิดสาย
+- [x] เพิ่ม `js/catalog.js` เป็น Device Catalog + Feature Registry เพื่อให้คำถามตามอุปกรณ์ขยายได้โดยไม่ hard-code หน้า UI
+- [x] เพิ่ม Packet Tracer-oriented catalog มากกว่า 50 profiles ครอบคลุม Router, L2/L3 Switch, Firewall, Wireless, WAN, End Devices, Server, IP Phone และ IoT
+- [x] เพิ่ม `js/topology.js`: Graph state, duplicate-link guard, validation, Access/Trunk/Routed inference, automatic port assignment และ IPv4 planning
+- [x] Auto IP Plan: VLAN ใช้ /24 จาก Base Network และ Routed point-to-point link ใช้ /30 จากปลาย address space
+- [x] เพิ่ม Link Intent per connection: Auto / Access / Trunk / Routed, Access VLAN และ Allowed VLANs
+- [x] เพิ่ม `js/config-engine.js` สร้าง config แยกอุปกรณ์และสร้าง GUI setup guide สำหรับอุปกรณ์ที่ไม่ใช้ Cisco IOS CLI โดยตรง
+- [x] รองรับ common Router/Switch functions: VLAN, SVI, Inter-VLAN, Router-on-a-Stick, SSH, ACL management policy, DHCP, NAT/PAT, Static NAT, RIP, OSPF, EIGRP, BGP neighbor inference, IPv6 addressing, STP, PortFast, BPDU Guard, Port Security, Native VLAN, VTP, DHCP Snooping, DAI, EtherChannel input, HSRP, NTP, Syslog
+- [x] เพิ่ม Test Checklist สำหรับ Packet Tracer หลัง Generate
+- [x] เพิ่ม Export Project JSON + Download config รวม
+- [x] เพิ่ม Node.js automated tests และเปลี่ยน `npm test` ให้รัน test suite จริง
+- [x] Test ล่าสุดของ Phase 6: **9/9 ผ่าน**
+
+### Current limitation / next expansion
+- เป้าหมาย “อุปกรณ์และฟังก์ชันทั้งหมดใน Cisco Packet Tracer” เป็น version/model/IOS-dependent; V2 วาง architecture สำหรับขยายครบแบบ catalog-driven แล้ว แต่ยังไม่ควรอ้างว่า exact every device + every IOS command ครบ 100% ทุก Packet Tracer installation
+- ควรเพิ่ม model-specific port map และ command capability matrix ต่อรุ่น โดยเฉพาะ ASA 5505/5506-X, WLC GUI, Industrial Networking, IoT/PLC และ module/WIC variations
+- ขั้นต่อไปที่เหมาะที่สุดคือเพิ่ม **Packet Tracer Compatibility Matrix** และ automated config validation scenarios ต่อ model
+
+
+## 7. Phase 7 — Responsive Web Design (2026-09-05)
+- [x] NET-AUTO v2.2 รองรับ Desktop / Tablet / Phone ด้วย breakpoint 1320, 1180, 980, 760 และ 480 px
+- [x] รักษาปุ่ม Load Demo และ Export Project ให้เข้าถึงได้บน Tablet/Mobile (ไม่ซ่อนฟังก์ชัน)
+- [x] Mobile Device Library เป็น horizontal touch shelf ลดความยาวหน้าก่อนถึง Topology
+- [x] Topology node size ใช้ CSS variables และ JS อ่านขนาดจริง ไม่ hard-code 156×94 อีกต่อไป
+- [x] ResizeObserver clamp ตำแหน่ง node เมื่อ resize window หรือหมุนโทรศัพท์/แท็บเล็ต
+- [x] Link line คำนวณ center จากขนาด node จริง จึงตรงบนทุก breakpoint
+- [x] Mobile inputs/buttons ใช้ touch target ประมาณ 44px และรองรับ safe-area inset
+- [x] Step 2 / Step 3 / Config output ปรับ layout ไม่ให้เกิด horizontal page overflow
+
+
+## 8. Phase 8 — Auto CIDR + Conditional VLAN (2026-09-05)
+- [x] Base Network รับเฉพาะ IPv4 `x.x.x.x` ไม่รับ `/xx` จากผู้ใช้
+- [x] เพิ่ม `Subnet.inferCidr()` และ `calculateAutoSubnet()`; ตัวอย่าง `10.10.0.0 → /16`, `192.168.1.0 → /24`
+- [x] Step 1 แสดง CIDR, Subnet Mask, Network, Broadcast, Usable IP Range และ Host count แบบ realtime
+- [x] ย้าย VLAN editor ออกจาก Step 1 ไป Step 2
+- [x] VLAN Plan แสดงแบบ conditional ตาม Feature Registry เท่านั้น
+- [x] ปรับ default ของ Custom VLAN features ให้เป็น opt-in (ไม่บังคับ VLAN โดยอัตโนมัติ)
+- [x] Flat Network mode สร้าง config โดยไม่ใส่ custom VLAN commands ที่ผู้ใช้ไม่ได้เลือก
+- [x] Auto link inference เก็บ `mode=auto` และใช้ `resolvedMode` เพื่อเปลี่ยนตาม VLAN intent ได้
+- [x] Automated tests ล่าสุด: **17/17 ผ่าน**

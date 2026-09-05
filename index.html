@@ -1,539 +1,148 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NET-AUTO // Network Automation & Subnet Console</title>
-  <meta name="description" content="A premium, lightweight, browser-based Network Auto-Config and Subnet Calculator for enterprise Cisco switch and router deployment. Zero Human Error.">
-  
-  <!-- Google Fonts: Rajdhani (Technical/Geometric Sans) & JetBrains Mono (Console) -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <meta name="description" content="Topology-first Cisco Packet Tracer configuration generator for beginners.">
+  <title>NET-AUTO // Topology Configurator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Main Stylesheet -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="ambient-grid" aria-hidden="true"></div>
 
-  <!-- Full-screen Boot Sequence Intro Overlay -->
-  <div id="intro-overlay" class="intro-screen" role="dialog" aria-modal="true" aria-labelledby="intro-title">
-    <div class="intro-content">
-      <div id="intro-panel" class="intro-panel-view">
-        <div class="intro-logo-glow">// NET-AUTO.OS //</div>
-        <h2 id="intro-title" class="intro-main-title">SECURE SYSTEM CONSOLE</h2>
-        <p class="intro-subtitle">Automated Cisco Network Configuration Platform</p>
-        
-        <button type="button" id="btn-initiate" class="btn-initiate">
-          <span class="btn-initiate-label">[ INITIATE SYSTEM ]</span>
-        </button>
-      </div>
-
-      <!-- Terminal Boot Loader Mockup -->
-      <div id="boot-terminal" class="boot-terminal" aria-live="polite"></div>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="NET-AUTO — Topology to Cisco Config">
+      <picture>
+        <source media="(max-width:760px)" srcset="assets/devices/net-auto-router-mark.webp">
+        <img class="brand-logo" src="assets/devices/net-auto-wordmark.webp" alt="NET-AUTO router signal logo">
+      </picture>
+    </a>
+    <nav id="stepper" class="stepper" aria-label="ขั้นตอนการทำงาน">
+      <button class="workflow-step active" data-step="1" type="button"><span>01</span><b>วาง Network</b></button>
+      <button class="workflow-step" data-step="2" type="button"><span>02</span><b>เลือกฟังก์ชัน</b></button>
+      <button class="workflow-step" data-step="3" type="button"><span>03</span><b>รับ Config</b></button>
+    </nav>
+    <div class="top-actions">
+      <button id="btn-load-demo" class="ghost" type="button">โหลดตัวอย่าง</button>
+      <button id="btn-export-project" class="ghost" type="button">Export Project</button>
     </div>
-  </div>
+  </header>
 
-  <!-- Background Layer: Looping Video & Interactive Canvas Overlay -->
-  <div class="cyber-bg-container" aria-hidden="true">
-    <video class="cyber-bg-video" autoplay loop muted playsinline>
-      <source src="assets/media/topology_bg.mp4" type="video/mp4">
-    </video>
-    <canvas id="cyber-bg-canvas" class="cyber-bg-canvas"></canvas>
-    <div class="cyber-bg-overlay"></div>
-  </div>
-
-  <!-- Main Dashboard Container -->
-  <div class="console-wrapper">
-    
-    <!-- Top HUD/Header -->
-    <header class="hud-header">
-      <div class="hud-logo">
-        <span class="hud-logo-tag">// NET-AUTO.OS</span>
-        <h1 class="hud-title">NETWORK AUTOMATION & CONFIG CONSOLE</h1>
-      </div>
-      <div class="hud-stats">
-        <div class="hud-stat-item">
-          <span class="hud-stat-label">SYS_ADMIN</span>
-          <span class="hud-stat-val text-cyan">SUPAKORN P.</span>
-        </div>
-        <div class="hud-stat-item">
-          <span class="hud-stat-label">NODE_ID</span>
-          <span class="hud-stat-val">68319010053</span>
-        </div>
-        <div class="hud-stat-item">
-          <span class="hud-stat-label">SYS_STATUS</span>
-          <span class="hud-stat-val val-online">● ONLINE</span>
-        </div>
-        <div class="hud-stat-item">
-          <span class="hud-stat-label">LOC_TIME</span>
-          <span id="hud-clock" class="hud-stat-val">19:06:18</span>
-        </div>
-      </div>
-    </header>
-
-    <!-- Main Content Layout (Asymmetrical Grid) -->
-    <main class="console-grid">
-      
-      <!-- Left Column: Input Settings Panel -->
-      <section class="panel settings-pane" aria-labelledby="settings-title">
-        <h2 id="settings-title" class="sr-only">Network Input Parameters</h2>
-        
-        <!-- Tab Navigation (Subtle lines, no cards) -->
-        <nav class="console-nav" aria-label="Tool Mode Selection">
-          <button type="button" class="nav-btn active" id="btn-tab-subnet" data-target="sec-subnet">
-            <span class="btn-hex-deco"></span>01. SUBNET CALCULATOR
-          </button>
-          <button type="button" class="nav-btn" id="btn-tab-generator" data-target="sec-generator">
-            <span class="btn-hex-deco"></span>02. AUTO-CONFIG GEN
-          </button>
-        </nav>
-
-        <div class="form-container">
-          
-          <!-- SECTION 1: Subnet Calculator -->
-          <fieldset id="sec-subnet" class="form-section active">
-            <legend class="section-legend">IP Subnetting Logic</legend>
-            <p class="section-desc">Compute binary IP structures instantly. Enter your IPv4 address and subnet prefix to determine exact network parameters.</p>
-            
-            <div class="input-group">
-              <label for="subnet-ip">Base IP Address</label>
-              <div class="input-wrapper">
-                <span class="input-prefix">IP_ADDR</span>
-                <input type="text" id="subnet-ip" placeholder="192.168.1.1" value="192.168.1.1" required pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
-              </div>
-            </div>
-
-            <div class="input-group">
-              <label for="subnet-cidr">CIDR Prefix</label>
-              <div class="input-wrapper">
-                <span class="input-prefix">PREFIX</span>
-                <select id="subnet-cidr" required>
-                  <option value="30">/30 (4 IPs - WAN Link)</option>
-                  <option value="29">/29 (8 IPs)</option>
-                  <option value="28">/28 (16 IPs)</option>
-                  <option value="27">/27 (32 IPs)</option>
-                  <option value="26">/26 (64 IPs)</option>
-                  <option value="25">/25 (128 IPs)</option>
-                  <option value="24" selected>/24 (256 IPs - Class C Standard)</option>
-                  <option value="23">/23 (512 IPs)</option>
-                  <option value="22">/22 (1024 IPs)</option>
-                  <option value="21">/21 (2048 IPs)</option>
-                  <option value="20">/20 (4096 IPs)</option>
-                  <option value="16">/16 (65536 IPs - Class B Standard)</option>
-                  <option value="8">/8 (16.7M IPs - Class A Standard)</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="btn-action-container">
-              <button type="button" id="btn-calculate" class="btn-primary">
-                <span class="btn-glow"></span>
-                <span class="btn-label" data-scramble="COMPUTE SUBNET">COMPUTE SUBNET</span>
-              </button>
-            </div>
-          </fieldset>
-
-          <!-- SECTION 2: Auto-Config Generator -->
-          <fieldset id="sec-generator" class="form-section">
-            <legend class="section-legend">Cisco Device Parameters</legend>
-            <p class="section-desc">Configure hostnames, management security, VLAN segments, and automate router/switch configurations in seconds.</p>
-
-            <div class="input-row-2">
-              <div class="input-group">
-                <label for="gen-hostname">Hostname</label>
-                <div class="input-wrapper">
-                  <span class="input-prefix">HOST</span>
-                  <input type="text" id="gen-hostname" placeholder="Core-SW-01" value="Core-SW-01" required>
-                </div>
-              </div>
-              <div class="input-group">
-                <label for="gen-secret">Enable Secret Password</label>
-                <div class="input-wrapper">
-                  <span class="input-prefix">SEC_PW</span>
-                  <input type="password" id="gen-secret" placeholder="cisco123" value="adminsecret">
-                </div>
-              </div>
-            </div>
-
-            <div class="input-row-2">
-              <div class="input-group">
-                <label for="gen-device-role">Device Role</label>
-                <div class="input-wrapper">
-                  <span class="input-prefix">ROLE</span>
-                  <select id="gen-device-role" required>
-                    <option value="L3_Core_Switch" selected>L3 Core Switch</option>
-                    <option value="Edge_Router">Edge Router</option>
-                    <option value="L2_Access_Switch">L2 Access Switch</option>
-                  </select>
-                </div>
-              </div>
-              <div class="input-group">
-                <label for="gen-hw-model">Hardware Model</label>
-                <div class="input-wrapper">
-                  <span class="input-prefix">MODEL</span>
-                  <input type="text" id="gen-hw-model" placeholder="Catalyst 9300" value="Catalyst 9300" required>
-                </div>
-              </div>
-            </div>
-
-            <div class="input-row-2">
-              <div class="input-group">
-                <label for="gen-motd">Banner MOTD Message</label>
-                <div class="input-wrapper">
-                  <span class="input-prefix">BANNER</span>
-                  <input type="text" id="gen-motd" placeholder="UNAUTHORIZED ACCESS PROHIBITED" value="AUTHORIZED ACCESS ONLY - DEVNET AUTOMATION SECURED">
-                </div>
-              </div>
-              <div class="input-group">
-                <label for="gen-port-type">Device Port Type</label>
-                <div class="input-wrapper">
-                  <span class="input-prefix">PORT_TYP</span>
-                  <select id="gen-port-type" required>
-                    <option value="FastEthernet" selected>FastEthernet (Fa)</option>
-                    <option value="GigabitEthernet">GigabitEthernet (Gi)</option>
-                    <option value="TenGigabitEthernet">TenGigabitEthernet (Te)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div class="checkbox-row">
-              <label class="switch-container">
-                <input type="checkbox" id="gen-enable-ssh" checked>
-                <span class="switch-slider"></span>
-                <span class="switch-label">Enable SSH & VTY Sec</span>
-              </label>
-              <label class="switch-container">
-                <input type="checkbox" id="gen-disable-dns" checked>
-                <span class="switch-slider"></span>
-                <span class="switch-label">Disable IP Domain-Lookup</span>
-              </label>
-            </div>
-
-            <!-- VLAN Dynamic Segment -->
-            <div class="vlan-container">
-              <div class="vlan-header">
-                <h3>VLAN SEGMENTS</h3>
-                <button type="button" id="btn-add-vlan" class="btn-secondary compact">
-                  <span>+ ADD VLAN</span>
-                </button>
-              </div>
-              
-              <!-- VLAN Dynamic Row List -->
-              <div id="vlan-list" class="vlan-list">
-                <!-- Initial VLAN 10 -->
-                <div class="vlan-row" data-vlan-index="0">
-                  <div class="vlan-field vlan-id-col">
-                    <label class="sr-only">VLAN ID</label>
-                    <input type="number" class="vlan-id-input" placeholder="ID" value="10" min="2" max="4094" required title="VLAN ID (2-4094)">
-                  </div>
-                  <div class="vlan-field vlan-name-col">
-                    <label class="sr-only">VLAN Name</label>
-                    <input type="text" class="vlan-name-input" placeholder="Name" value="Management" required title="VLAN Name">
-                  </div>
-                  <div class="vlan-field vlan-ip-col">
-                    <label class="sr-only">IP Address</label>
-                    <input type="text" class="vlan-ip-input" placeholder="IP (e.g. 192.168.10.1)" value="192.168.10.1" required pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" title="SVI IP Address">
-                  </div>
-                  <div class="vlan-field vlan-port-col">
-                    <label class="sr-only">Port Range</label>
-                    <input type="text" class="vlan-port-input" placeholder="Ports (e.g. 0/1-10)" value="0/1-10" title="Switchport Access Ports">
-                  </div>
-                  <div class="vlan-field vlan-mask-col">
-                    <label class="sr-only">CIDR</label>
-                    <select class="vlan-cidr-select" title="Subnet Prefix">
-                      <option value="30">/30</option>
-                      <option value="29">/29</option>
-                      <option value="28">/28</option>
-                      <option value="27">/27</option>
-                      <option value="26">/26</option>
-                      <option value="25">/25</option>
-                      <option value="24" selected>/24</option>
-                      <option value="16">/16</option>
-                    </select>
-                  </div>
-                  <div class="vlan-field vlan-dhcp-col">
-                    <label class="checkbox-label" title="Enable DHCP pool for this VLAN">
-                      <input type="checkbox" class="vlan-dhcp-check" checked>
-                      <span>DHCP</span>
-                    </label>
-                  </div>
-                  <button type="button" class="btn-remove-vlan" title="Delete VLAN">×</button>
-                </div>
-                <!-- Initial VLAN 20 -->
-                <div class="vlan-row" data-vlan-index="1">
-                  <div class="vlan-field vlan-id-col">
-                    <label class="sr-only">VLAN ID</label>
-                    <input type="number" class="vlan-id-input" placeholder="ID" value="20" min="2" max="4094" required title="VLAN ID (2-4094)">
-                  </div>
-                  <div class="vlan-field vlan-name-col">
-                    <label class="sr-only">VLAN Name</label>
-                    <input type="text" class="vlan-name-input" placeholder="Name" value="Engineering" required title="VLAN Name">
-                  </div>
-                  <div class="vlan-field vlan-ip-col">
-                    <label class="sr-only">IP Address</label>
-                    <input type="text" class="vlan-ip-input" placeholder="IP (e.g. 192.168.20.1)" value="192.168.20.1" required pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" title="SVI IP Address">
-                  </div>
-                  <div class="vlan-field vlan-port-col">
-                    <label class="sr-only">Port Range</label>
-                    <input type="text" class="vlan-port-input" placeholder="Ports (e.g. 0/11-20)" value="0/11-20" title="Switchport Access Ports">
-                  </div>
-                  <div class="vlan-field vlan-mask-col">
-                    <label class="sr-only">CIDR</label>
-                    <select class="vlan-cidr-select" title="Subnet Prefix">
-                      <option value="30">/30</option>
-                      <option value="29">/29</option>
-                      <option value="28">/28</option>
-                      <option value="27">/27</option>
-                      <option value="26">/26</option>
-                      <option value="25">/25</option>
-                      <option value="24" selected>/24</option>
-                      <option value="16">/16</option>
-                    </select>
-                  </div>
-                  <div class="vlan-field vlan-dhcp-col">
-                    <label class="checkbox-label" title="Enable DHCP pool for this VLAN">
-                      <input type="checkbox" class="vlan-dhcp-check" checked>
-                      <span>DHCP</span>
-                    </label>
-                  </div>
-                  <button type="button" class="btn-remove-vlan" title="Delete VLAN">×</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Router Dynamic Segment -->
-            <div class="router-container">
-              <div class="router-header">
-                <h3>ROUTER INTERFACES & ROUTING</h3>
-              </div>
-              
-              <div class="router-fields">
-                <div class="router-section-title">Interface Configuration</div>
-                
-                <div class="input-row-2">
-                  <div class="input-group">
-                    <label for="router-wan-if">WAN Interface</label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">WAN_IF</span>
-                      <input type="text" id="router-wan-if" placeholder="GigabitEthernet0/0/0" value="GigabitEthernet0/0/0">
-                    </div>
-                  </div>
-                  <div class="input-group">
-                    <label for="router-wan-ip">WAN IP / Prefix</label>
-                    <div class="input-row-sub">
-                      <div class="input-wrapper" style="flex: 2;">
-                        <span class="input-prefix">WAN_IP</span>
-                        <input type="text" id="router-wan-ip" placeholder="10.0.0.2" value="10.0.0.2">
-                      </div>
-                      <div class="input-wrapper" style="flex: 1;">
-                        <span class="input-prefix">/</span>
-                        <select id="router-wan-cidr" title="WAN Subnet">
-                          <option value="30" selected>/30</option>
-                          <option value="29">/29</option>
-                          <option value="28">/28</option>
-                          <option value="24">/24</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="input-row-2">
-                  <div class="input-group">
-                    <label for="router-lan-if">LAN Interface</label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">LAN_IF</span>
-                      <input type="text" id="router-lan-if" placeholder="GigabitEthernet0/0/1" value="GigabitEthernet0/0/1">
-                    </div>
-                  </div>
-                  <div class="input-group">
-                    <label for="router-lan-ip">LAN IP / Prefix</label>
-                    <div class="input-row-sub">
-                      <div class="input-wrapper" style="flex: 2;">
-                        <span class="input-prefix">LAN_IP</span>
-                        <input type="text" id="router-lan-ip" placeholder="192.168.1.1" value="192.168.1.1">
-                      </div>
-                      <div class="input-wrapper" style="flex: 1;">
-                        <span class="input-prefix">/</span>
-                        <select id="router-lan-cidr" title="LAN Subnet">
-                          <option value="30">/30</option>
-                          <option value="29">/29</option>
-                          <option value="28">/28</option>
-                          <option value="24" selected>/24</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="input-row-2">
-                  <div class="input-group">
-                    <label for="router-wan-gw">Default Gateway IP (ISP)</label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">WAN_GW</span>
-                      <input type="text" id="router-wan-gw" placeholder="10.0.0.1" value="10.0.0.1">
-                    </div>
-                  </div>
-                  <div class="input-group" style="visibility: hidden;">
-                    <!-- Placeholder for grid symmetry -->
-                  </div>
-                </div>
-
-                <div class="router-section-title">Routing & NAT Services</div>
-                
-                <div class="input-row-2">
-                  <div class="input-group">
-                    <label for="router-ospf-pid">OSPF Process ID</label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">OSPF_ID</span>
-                      <input type="number" id="router-ospf-pid" placeholder="1" value="1" min="1" max="65535">
-                    </div>
-                  </div>
-                  <div class="input-group">
-                    <label for="router-ospf-area">OSPF Area</label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">AREA</span>
-                      <input type="number" id="router-ospf-area" placeholder="0" value="0" min="0" max="4294967295">
-                    </div>
-                  </div>
-                </div>
-
-                <div class="checkbox-row" style="margin-top: var(--space-sm);">
-                  <label class="switch-container">
-                    <input type="checkbox" id="router-enable-ospf" checked>
-                    <span class="switch-slider"></span>
-                    <span class="switch-label">Enable OSPF</span>
-                  </label>
-                  <label class="switch-container">
-                    <input type="checkbox" id="router-enable-nat" checked>
-                    <span class="switch-slider"></span>
-                    <span class="switch-label">Enable PAT (Overload)</span>
-                  </label>
-                  <label class="switch-container">
-                    <input type="checkbox" id="router-block-ssh" checked>
-                    <span class="switch-slider"></span>
-                    <span class="switch-label">Block External SSH/Telnet (WAN)</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div class="btn-action-container">
-              <button type="button" id="btn-generate" class="btn-primary accent-purple">
-                <span class="btn-glow"></span>
-                <span class="btn-label" data-scramble="COMPILE CISCO IOS">COMPILE CISCO IOS</span>
-              </button>
-            </div>
-          </fieldset>
-
-        </div>
-      </section>
-
-      <!-- Right Column: Interactive Console / Terminal Output Panel -->
-      <section class="panel console-pane" aria-labelledby="console-title">
-        <h2 id="console-title" class="sr-only">System Outputs and Code Console</h2>
-        
-        <!-- Live Subnet Status Dashboard (Divided with lines, no nested card) -->
-        <div class="dashboard-header">
-          <div class="status-indicator">
-            <span class="pulse-dot"></span>
-            <h3>LIVE SUBNET ANALYSIS</h3>
+  <main>
+    <!-- STEP 1 -->
+    <section class="step-panel active" data-panel="1">
+      <div class="workspace-grid">
+        <aside class="palette-pane">
+          <div class="pane-title"><div><span class="eyebrow">DEVICE LIBRARY</span><h1>เลือกอุปกรณ์</h1></div><span class="status-chip">PT 9-oriented</span></div>
+          <p class="pane-help">ลากอุปกรณ์ไปวางกลางจอ หรือคลิก <b>+</b> ก็ได้ ไม่ต้องเลือกชนิดสาย</p>
+          <div class="filter-stack">
+            <input id="device-search" type="search" placeholder="ค้นหา Router, 2960, PC...">
+            <select id="device-category" aria-label="กรองหมวดอุปกรณ์"></select>
           </div>
-          <div class="stats-grid">
-            <div class="stat-block">
-              <span class="stat-lbl">SUBNET_MASK</span>
-              <span class="stat-val-text" id="val-netmask">255.255.255.0</span>
+          <div id="device-palette" class="device-palette"></div>
+        </aside>
+
+        <section class="canvas-pane">
+          <div class="canvas-toolbar">
+            <div>
+              <span class="eyebrow">TOPOLOGY WORKSPACE</span>
+              <h2>ลากวาง แล้วเชื่อมอุปกรณ์</h2>
             </div>
-            <div class="stat-block">
-              <span class="stat-lbl">NETWORK_ADDR</span>
-              <span class="stat-val-text text-green" id="val-netaddr">192.168.1.0</span>
-            </div>
-            <div class="stat-block">
-              <span class="stat-lbl">BROADCAST_ADDR</span>
-              <span class="stat-val-text text-red" id="val-broadcast">192.168.1.255</span>
-            </div>
-            <div class="stat-block">
-              <span class="stat-lbl">USABLE_HOST_RANGE</span>
-              <span class="stat-val-text" id="val-hostrange">192.168.1.1 - 192.168.1.254</span>
-            </div>
-            <div class="stat-block">
-              <span class="stat-lbl">TOTAL_HOSTS</span>
-              <span class="stat-val-text text-cyan" id="val-totalhosts">254 Hosts</span>
+            <div class="toolbar-actions">
+              <button id="btn-connect" class="connect-btn" type="button"><span class="link-dot"></span>เชื่อมอุปกรณ์</button>
+              <button id="btn-clear" class="ghost danger" type="button">ล้างทั้งหมด</button>
             </div>
           </div>
-        </div>
+          <div id="topology-canvas" class="topology-canvas" aria-label="พื้นที่วาง topology">
+            <svg id="link-layer" class="link-layer" width="100%" height="100%" aria-hidden="true"></svg>
+            <div class="canvas-hint"><b>DROP DEVICES HERE</b><span>จากนั้นกด “เชื่อมอุปกรณ์” → คลิกตัวแรก → คลิกตัวที่สอง</span></div>
+          </div>
 
-        <!-- Terminal Window Mockup -->
-        <div class="terminal-window">
-          <div class="terminal-bar">
-            <div class="terminal-dots">
-              <span class="dot dot-close" aria-hidden="true"></span>
-              <span class="dot dot-minimize" aria-hidden="true"></span>
-              <span class="dot dot-expand" aria-hidden="true"></span>
+          <div class="network-intent">
+            <div class="intent-heading"><span class="eyebrow">NETWORK PLAN</span><b>ข้อมูลรวมของ Network</b></div>
+            <label class="base-network-field">Base Network
+              <div class="auto-ip-input"><input id="base-network" inputmode="decimal" autocomplete="off" value="10.10.0.0" placeholder="10.10.0.0"><span id="auto-cidr-badge">AUTO /16</span></div>
+              <small>ใส่เฉพาะ IPv4 เช่น 10.10.0.0 — ระบบหา /xx และคำนวณ Subnet ให้อัตโนมัติ<br><span class="auto-rule">กฎ Auto: x.0.0.0 → /8 • x.x.0.0 → /16 • x.x.x.0 → /24 • IP เครื่องทั่วไป → /24</span></small>
+            </label>
+            <label class="check-line"><input id="internet-required" type="checkbox"><span>Topology นี้ต้องออก Internet / WAN</span></label>
+            <div id="network-calculation" class="network-calculation" aria-live="polite"></div>
+          </div>
+
+          <div class="link-summary">
+            <div class="intent-heading"><span class="eyebrow">LOGICAL LINKS</span><b>การเชื่อมต่อที่ระบบเข้าใจ</b></div>
+            <div id="link-list"></div>
+          </div>
+        </section>
+
+        <aside class="inspector-pane">
+          <div class="pane-title"><div><span class="eyebrow">INSPECTOR</span><h2>อุปกรณ์ที่เลือก</h2></div></div>
+          <div id="inspector-body"></div>
+          <div id="validation-panel" class="validation-panel"></div>
+        </aside>
+      </div>
+      <div class="step-footer"><div><b>Step 1</b><span>ให้วางอุปกรณ์และเชื่อมให้ครบก่อน ระบบยังไม่สนใจชนิดสาย</span></div><button id="btn-step2" class="primary" type="button">วิเคราะห์ Topology และถามต่อ <span>→</span></button></div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="step-panel" data-panel="2">
+      <div class="question-layout">
+        <aside class="question-aside">
+          <span class="eyebrow">INTENT ENGINE</span>
+          <h1>ต้องการให้อุปกรณ์ทำอะไรบ้าง?</h1>
+          <p>ระบบแสดงคำถามจาก Feature Registry ของอุปกรณ์แต่ละประเภทโดยอัตโนมัติ เลือกเฉพาะสิ่งที่ต้องการให้ทำจริง</p>
+          <div class="explain-flow"><span>Topology</span><i>→</i><span>Features</span><i>→</i><span>IP Plan</span><i>→</i><span>CLI</span></div>
+          <button id="btn-back1" class="ghost wide" type="button">← กลับไปแก้ Topology</button>
+        </aside>
+        <section class="question-main">
+          <div class="section-heading"><div><span class="eyebrow">QUESTIONS BY DEVICE</span><h2>คำถามทั้งหมดตามความสามารถของอุปกรณ์</h2></div><span class="status-chip">Catalog-driven</span></div>
+          <div id="question-area"></div>
+          <section id="vlan-plan-section" class="vlan-plan-section" hidden>
+            <div class="section-heading"><div><span class="eyebrow">VLAN PLAN</span><h2>กำหนด VLAN เมื่อเลือกใช้ฟังก์ชัน VLAN</h2></div><span class="status-chip">Conditional</span></div>
+            <p class="muted">ส่วนนี้จะแสดงเฉพาะเมื่อมีอุปกรณ์เลือกฟังก์ชันที่ต้องใช้ Custom VLAN เช่น “สร้าง VLAN”, Inter-VLAN, Router-on-a-Stick หรือ WLAN → VLAN Mapping</p>
+            <div class="vlan-box step2-vlan-box">
+              <div class="vlan-title"><div><b>VLAN ที่ต้องการ</b><small id="vlan-plan-hint">ระบบจะจัด /24 ให้แต่ละ VLAN จาก Base Network</small></div><button id="btn-add-vlan" type="button">+ VLAN</button></div>
+              <div id="vlan-editor"></div>
             </div>
-            <span class="terminal-title">ios_config_engine.cli</span>
-            <span class="terminal-status-badge">AUTO_GEN.v1</span>
+          </section>
+          <div class="link-question-section">
+            <div class="section-heading"><div><span class="eyebrow">LINK INTENT</span><h2>แต่ละคู่ควรเชื่อมแบบไหน?</h2></div></div>
+            <p class="muted">ค่า Auto จะเดาจากชนิดอุปกรณ์ก่อน เช่น Switch↔Switch = Trunk, End Device↔Switch = Access, Router↔L3 = Routed</p>
+            <div id="link-question-area"></div>
           </div>
-          <div class="terminal-body">
-            <div class="code-line-numbers" id="terminal-line-numbers" aria-hidden="true">
-              <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span>
-            </div>
-            <pre class="terminal-pre"><code id="terminal-code" class="language-cisco">! --- CISCO IOS CONFIGURATION SCRIPT ---
-! Generated via Network Automation Console
-! Time: 2026-07-03 19:06:18
-! System Status: Stable / Offline Calculator Mode
-!
-! Press "COMPILE CISCO IOS" or "COMPUTE SUBNET" 
-! in the left configurations panel to construct CLI outputs.
-! -------------------------------------</code></pre>
-          </div>
-          
-          <!-- Terminal Actions footer -->
-          <div class="terminal-actions">
-            <button type="button" id="btn-copy-code" class="btn-console" title="Copy to clipboard">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span>COPY TO CLIPBOARD</span>
-            </button>
-            <button type="button" id="btn-download-code" class="btn-console" title="Download config file">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              <span>DOWNLOAD SCRIPT</span>
-            </button>
-          </div>
-        </div>
-
-      </section>
-
-    </main>
-
-    <!-- Bottom Tech Footer -->
-    <footer class="hud-footer">
-      <div class="footer-left">
-        <span>SYS_ADMIN // SUPAKORN P.</span>
-        <span class="dot-blinking"></span>
+        </section>
       </div>
-      <div class="footer-center">
-        <span>NODE_ID // 68319010053 // PORTFOLIO SHIELD</span>
-      </div>
-      <div class="footer-right">
-        <span>&copy; 2026 NET-AUTO. ZERO HUMAN ERROR.</span>
-      </div>
-    </footer>
+      <div class="step-footer"><div><b>Step 2</b><span>ระบบจะใช้คำตอบทั้งหมดนี้สร้าง Config แยกทุกอุปกรณ์</span></div><button id="btn-generate" class="primary purple" type="button">สร้าง Config ทั้ง Network <span>→</span></button></div>
+    </section>
 
-  </div>
+    <!-- STEP 3 -->
+    <section class="step-panel" data-panel="3">
+      <div class="result-layout">
+        <aside class="result-aside">
+          <span class="eyebrow">DEPLOYMENT OUTPUT</span><h1>Config พร้อมทดลอง</h1>
+          <p>คัดลอก Config ของแต่ละอุปกรณ์ไปวางใน Cisco Packet Tracer แล้วทำตาม Test Checklist ก่อนนำไปใช้กับเครื่องจริง</p>
+          <button id="btn-download-all" class="primary wide" type="button">Download Config ทั้งหมด</button>
+          <button id="btn-back2" class="ghost wide" type="button">← กลับไปแก้ฟังก์ชัน</button>
+          <div class="pt-note"><b>Packet Tracer First</b><span>คำสั่งบางฟังก์ชันขึ้นกับรุ่นและ IOS image ของอุปกรณ์ จึงควรทดสอบใน Packet Tracer ก่อนเสมอ</span></div>
+        </aside>
+        <section class="result-main">
+          <div class="section-heading"><div><span class="eyebrow">PER-DEVICE OUTPUT</span><h2>Configuration / Setup Guide</h2></div></div>
+          <div id="config-output"></div>
+          <section class="test-panel"><div class="section-heading"><div><span class="eyebrow">VERIFY BEFORE COMMIT</span><h2>Test Checklist</h2></div></div><ol id="test-checklist"></ol></section>
+        </section>
+      </div>
+    </section>
+  </main>
 
-  <!-- JavaScript Console Application Modules -->
-  <script src="js/effects.js"></script>
+  <footer><span>// NET-AUTO v2.4</span><span>Client-side only • No backend required</span><span>Built for topology-first learning</span></footer>
+
   <script src="js/subnet.js"></script>
-  <script src="js/generator.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/topology.js"></script>
+  <script src="js/config-engine.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
